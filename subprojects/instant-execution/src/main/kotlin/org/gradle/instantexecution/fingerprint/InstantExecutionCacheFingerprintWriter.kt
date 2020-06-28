@@ -17,7 +17,7 @@
 package org.gradle.instantexecution.fingerprint
 
 import com.google.common.collect.Sets.newConcurrentHashSet
-import org.gradle.api.artifacts.component.ComponentArtifactIdentifier
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ModuleComponentSelector
 import org.gradle.api.execution.internal.TaskInputsListener
 import org.gradle.api.internal.TaskInternal
@@ -105,9 +105,9 @@ class InstantExecutionCacheFingerprintWriter(
         onChangingValue(InstantExecutionCacheFingerprint.DynamicDependencyVersion(requested.displayName, expireAt))
     }
 
-    override fun onChangingModuleResolve(artifactId: ComponentArtifactIdentifier, expiry: Expiry) {
+    override fun onChangingModuleResolve(moduleId: ModuleComponentIdentifier, expiry: Expiry) {
         val expireAt = host.buildStartTime + expiry.keepFor.toMillis()
-        onChangingValue(InstantExecutionCacheFingerprint.ChangingArtifact(artifactId.displayName, expireAt))
+        onChangingValue(InstantExecutionCacheFingerprint.ChangingModule(moduleId.displayName, expireAt))
     }
 
     private fun onChangingValue(changingValue: InstantExecutionCacheFingerprint.ChangingDependencyResolutionValue) {

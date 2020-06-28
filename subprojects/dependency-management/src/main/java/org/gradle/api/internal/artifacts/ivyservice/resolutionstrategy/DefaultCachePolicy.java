@@ -49,6 +49,7 @@ public class DefaultCachePolicy implements CachePolicy {
     final List<Action<? super ArtifactResolutionControl>> artifactCacheRules;
     private MutationValidator mutationValidator = MutationValidator.IGNORE;
     private long keepDynamicVersionsFor = MILLISECONDS_IN_DAY;
+    private long keepChangingModulesFor = MILLISECONDS_IN_DAY;
 
     public DefaultCachePolicy() {
         this.dependencyCacheRules = new ArrayList<>();
@@ -97,6 +98,7 @@ public class DefaultCachePolicy implements CachePolicy {
     }
 
     public void cacheChangingModulesFor(final int value, final TimeUnit units) {
+        keepChangingModulesFor = units.toMillis(value);
         eachModule(moduleResolutionControl -> {
             if (moduleResolutionControl.isChanging()) {
                 moduleResolutionControl.cacheFor(value, units);
@@ -162,63 +164,63 @@ public class DefaultCachePolicy implements CachePolicy {
     }
 
     @Override
-    public boolean mustRefreshMissingModule(ModuleComponentIdentifier component, long ageMillis) {
-        return mustRefreshModule(component, null, ageMillis, false);
+    public Expiry missingModuleExpiry(ModuleComponentIdentifier component, Duration age) {
+        return mustRefreshModule(component, null, age, false);
     }
 
     @Override
-    public boolean mustRefreshModule(ModuleComponentIdentifier component, ResolvedModuleVersion resolvedModuleVersion, long ageMillis) {
-        return mustRefreshModule(component, resolvedModuleVersion, ageMillis, false);
+    public Expiry moduleExpiry(ModuleComponentIdentifier component, ResolvedModuleVersion resolvedModuleVersion, Duration age) {
+        return mustRefreshModule(component, resolvedModuleVersion, age, false);
     }
 
     @Override
-    public boolean mustRefreshModule(ResolvedModuleVersion resolvedModuleVersion, long ageMillis, boolean changing) {
-        return mustRefreshModule(resolvedModuleVersion.getId(), resolvedModuleVersion, ageMillis, changing);
+    public Expiry moduleExpiry(ResolvedModuleVersion resolvedModuleVersion, Duration age, boolean changing) {
+        return mustRefreshModule(resolvedModuleVersion.getId(), resolvedModuleVersion, age, changing);
     }
 
     @Override
-    public boolean mustRefreshChangingModule(ModuleComponentIdentifier component, ResolvedModuleVersion resolvedModuleVersion, long ageMillis) {
-        return mustRefreshModule(component, resolvedModuleVersion, ageMillis, true);
+    public Expiry changingModuleExpiry(ModuleComponentIdentifier component, ResolvedModuleVersion resolvedModuleVersion, Duration age) {
+        return mustRefreshModule(component, resolvedModuleVersion, age, true);
     }
 
-    private boolean mustRefreshModule(ModuleComponentIdentifier component, ResolvedModuleVersion version, long ageMillis, boolean changingModule) {
-        return mustRefreshModule(DefaultModuleVersionIdentifier.newId(component.getModuleIdentifier(), component.getVersion()), version, ageMillis, changingModule);
+    private Expiry mustRefreshModule(ModuleComponentIdentifier component, ResolvedModuleVersion version, Duration age, boolean changingModule) {
+        return mustRefreshModule(DefaultModuleVersionIdentifier.newId(component.getModuleIdentifier(), component.getVersion()), version, age, changingModule);
     }
 
-    private boolean mustRefreshModule(ModuleVersionIdentifier moduleVersionId, ResolvedModuleVersion version, long ageMillis, boolean changingModule) {
-        CachedModuleResolutionControl moduleResolutionControl = new CachedModuleResolutionControl(moduleVersionId, version, changingModule, ageMillis, MILLISECONDS_IN_DAY);
+    private CachedModuleResolutionControl mustRefreshModule(ModuleVersionIdentifier moduleVersionId, ResolvedModuleVersion version, Duration age, boolean changingModule) {
+        CachedModuleResolutionControl moduleResolutionControl = new CachedModuleResolutionControl(moduleVersionId, version, changingModule, age.toMillis(), MILLISECONDS_IN_DAY);
 
         for (Action<? super ModuleResolutionControl> rule : moduleCacheRules) {
             rule.execute(moduleResolutionControl);
             if (moduleResolutionControl.ruleMatch()) {
-                return moduleResolutionControl.isMustCheck();
+                break;
             }
         }
 
-        return false;
+        return moduleResolutionControl;
     }
 
     @Override
-    public boolean mustRefreshModuleArtifacts(ModuleVersionIdentifier moduleVersionId, Set<ArtifactIdentifier> artifacts,
-                                              long ageMillis, boolean belongsToChangingModule, boolean moduleDescriptorInSync) {
+    public Expiry moduleArtifactsExpiry(ModuleVersionIdentifier moduleVersionId, Set<ArtifactIdentifier> artifacts,
+                                        Duration age, boolean belongsToChangingModule, boolean moduleDescriptorInSync) {
+        CachedModuleResolutionControl resolutionControl = mustRefreshModule(moduleVersionId, new DefaultResolvedModuleVersion(moduleVersionId), age, belongsToChangingModule);
         if (belongsToChangingModule && !moduleDescriptorInSync) {
-            return true;
+            resolutionControl.refresh();
         }
-        return mustRefreshModule(moduleVersionId, new DefaultResolvedModuleVersion(moduleVersionId), ageMillis, belongsToChangingModule);
+        return resolutionControl;
     }
 
     @Override
     public Expiry artifactExpiry(ArtifactIdentifier artifactIdentifier, File cachedArtifactFile, Duration age, boolean belongsToChangingModule, boolean moduleDescriptorInSync) {
-        CachedArtifactResolutionControl artifactResolutionControl = new CachedArtifactResolutionControl(artifactIdentifier, cachedArtifactFile, age.toMillis(), MILLISECONDS_IN_DAY, belongsToChangingModule);
-        if (belongsToChangingModule && !moduleDescriptorInSync) {
-            artifactResolutionControl.refresh();
-            return artifactResolutionControl;
-        }
+        CachedArtifactResolutionControl artifactResolutionControl = new CachedArtifactResolutionControl(artifactIdentifier, cachedArtifactFile, age.toMillis(), keepChangingModulesFor, belongsToChangingModule);
         for (Action<? super ArtifactResolutionControl> rule : artifactCacheRules) {
             rule.execute(artifactResolutionControl);
             if (artifactResolutionControl.ruleMatch()) {
                 break;
             }
+        }
+        if (belongsToChangingModule && !moduleDescriptorInSync) {
+            artifactResolutionControl.refresh();
         }
         return artifactResolutionControl;
     }

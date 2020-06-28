@@ -17,6 +17,7 @@
 package org.gradle.api.internal.artifacts.ivyservice.ivyresolve;
 
 import org.gradle.api.artifacts.component.ComponentArtifactIdentifier;
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.artifacts.component.ModuleComponentSelector;
 import org.gradle.api.internal.artifacts.configurations.dynamicversion.Expiry;
 import org.gradle.internal.service.scopes.EventScope;
@@ -35,5 +36,5 @@ public interface ChangingValueDependencyResolutionListener {
     /**
      * Called when a changing artifact is resolved using the artifact state queried from a repository.
      */
-    void onChangingModuleResolve(ComponentArtifactIdentifier artifactId, Expiry expiry);
+    void onChangingModuleResolve(ModuleComponentIdentifier moduleId, Expiry expiry);
 }

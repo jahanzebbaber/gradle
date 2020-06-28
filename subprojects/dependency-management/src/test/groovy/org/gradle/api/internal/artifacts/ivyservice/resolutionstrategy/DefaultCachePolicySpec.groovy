@@ -78,7 +78,7 @@ class DefaultCachePolicySpec extends Specification {
         def module = moduleComponent('org', 'foo', '1.0')
 
         then:
-        !cachePolicy.mustRefreshMissingModule(module, WEEK)
+        !cachePolicy.missingModuleExpiry(module, WEEK)
     }
 
     def "uses changing module timeout for changing modules"() {
@@ -237,7 +237,7 @@ class DefaultCachePolicySpec extends Specification {
                 t.refresh()
             }
         })
-        cachePolicy.mustRefreshModule(moduleComponent('g', 'n', 'v'), moduleVersion('group', 'name', 'version'), 5)
+        cachePolicy.moduleExpiry(moduleComponent('g', 'n', 'v'), moduleVersion('group', 'name', 'version'), 5)
     }
 
     def "provides details of cached changing module"() {
@@ -250,7 +250,7 @@ class DefaultCachePolicySpec extends Specification {
                 t.refresh()
             }
         })
-        cachePolicy.mustRefreshChangingModule(moduleComponent('g', 'n', 'v'), moduleVersion('group', 'name', 'version'), 5)
+        cachePolicy.changingModuleExpiry(moduleComponent('g', 'n', 'v'), moduleVersion('group', 'name', 'version'), 5)
     }
 
     def "provides details of cached artifact"() {
@@ -402,29 +402,29 @@ class DefaultCachePolicySpec extends Specification {
     private def hasChangingModuleTimeout(int timeout) {
         def id = moduleComponent('group', 'name', 'version')
         def module = moduleVersion('group', 'name', 'version')
-        assert !cachePolicy.mustRefreshChangingModule(id, module, timeout - 1)
-        assert !cachePolicy.mustRefreshChangingModule(id, module, timeout);
-        assert cachePolicy.mustRefreshChangingModule(id, module, timeout + 1)
+        assert !cachePolicy.changingModuleExpiry(id, module, timeout - 1)
+        assert !cachePolicy.changingModuleExpiry(id, module, timeout);
+        assert cachePolicy.changingModuleExpiry(id, module, timeout + 1)
         true
     }
 
     private def hasModuleTimeout(int timeout) {
         def id = moduleComponent('group', 'name', 'version')
         def module = moduleVersion('group', 'name', 'version')
-        assert !cachePolicy.mustRefreshModule(id, module, timeout);
-        assert !cachePolicy.mustRefreshModule(id, module, timeout - 1)
+        assert !cachePolicy.moduleExpiry(id, module, timeout);
+        assert !cachePolicy.moduleExpiry(id, module, timeout - 1)
         if (timeout != FOREVER) {
-            assert cachePolicy.mustRefreshModule(id, module, timeout + 1)
+            assert cachePolicy.moduleExpiry(id, module, timeout + 1)
         }
         true
     }
 
     private def hasMissingModuleTimeout(int timeout) {
         def id = moduleComponent('group', 'name', 'version')
-        assert !cachePolicy.mustRefreshModule(id, null, timeout);
-        assert !cachePolicy.mustRefreshModule(id, null, timeout - 1)
+        assert !cachePolicy.moduleExpiry(id, null, timeout);
+        assert !cachePolicy.moduleExpiry(id, null, timeout - 1)
         if (timeout != FOREVER) {
-            assert cachePolicy.mustRefreshModule(id, null, timeout + 1)
+            assert cachePolicy.moduleExpiry(id, null, timeout + 1)
         }
         return true
     }

@@ -63,12 +63,12 @@ sealed class InstantExecutionCacheFingerprint {
             get() = "cached version information for $displayName has expired"
     }
 
-    class ChangingArtifact(
+    class ChangingModule(
         val displayName: String,
         expireAt: Long
     ) : ChangingDependencyResolutionValue(expireAt) {
         override val reason: String
-            get() = "cached information for changing artifact $displayName has expired"
+            get() = "cached artifact information for $displayName has expired"
     }
 }
 

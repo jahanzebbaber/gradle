@@ -232,10 +232,6 @@ class DependencyManagementBuildScopeServices {
         return new RuntimeShadedJarFactory(jarCache, progressLoggerFactory, classpathWalker, classpathBuilder, executor);
     }
 
-    BuildCommencedTimeProvider createBuildTimeProvider() {
-        return new BuildCommencedTimeProvider();
-    }
-
     ModuleExclusions createModuleExclusions() {
         return new ModuleExclusions();
     }
