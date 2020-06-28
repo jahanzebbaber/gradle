@@ -115,4 +115,88 @@ class InstantExecutionDependencyResolutionFeaturesIntegrationTest extends Abstra
         outputContains("Calculating task graph as configuration cache cannot be reused because cached version information for thing:lib:1.+ has expired.")
         outputContains("result = [lib-1.3.jar]")
     }
+
+    def  "invalidates configuration cache entry when changing artifact expiry is reached"() {
+        given:
+        server.start()
+
+        def v3 = remoteRepo.module("thing", "lib", "1.3").publish()
+
+        taskTypeLogsInputFileCollectionContent()
+        buildFile << """
+            configurations {
+                implementation {
+                    def timeout = providers.gradleProperty("cache-for").forUseAtConfigurationTime().orElse(7).get().toInteger()
+                    resolutionStrategy.cacheChangingModulesFor(timeout, ${TimeUnit.name}.DAYS)
+                }
+            }
+
+            repositories { maven { url = '${remoteRepo.uri}' } }
+
+            dependencies {
+                implementation('thing:lib:1.3') {
+                    changing = true
+                }
+            }
+
+            task resolve1(type: ShowFilesTask) {
+                inFiles.from(configurations.implementation)
+            }
+            task resolve2(type: ShowFilesTask) {
+                inFiles.from(configurations.implementation)
+            }
+        """
+        def fixture = newInstantExecutionFixture()
+
+        v3.pom.expectGet()
+        v3.artifact.expectGet()
+
+        when:
+        instantRun("resolve1")
+
+        then:
+        fixture.assertStateStored()
+        outputContains("result = [lib-1.3.jar]")
+
+        when:
+        instantRun("resolve1")
+
+        then:
+        fixture.assertStateLoaded()
+        outputContains("result = [lib-1.3.jar]")
+
+        when: // run again with different tasks, to verify behaviour when artifact information is cached
+        instantRun("resolve2")
+
+        then:
+        fixture.assertStateStored()
+        outputContains("result = [lib-1.3.jar]")
+
+        when:
+        instantRun("resolve2")
+
+        then:
+        fixture.assertStateLoaded()
+        outputContains("result = [lib-1.3.jar]")
+
+        when: // use a shorter expiry
+        v3.pom.expectHead()
+        v3.artifact.expectHead()
+
+        instantRun("resolve1", "-Pcache-for=0")
+
+        then:
+        fixture.assertStateStored()
+        outputContains("result = [lib-1.3.jar]")
+
+        when:
+        v3.pom.expectHead()
+        v3.artifact.expectHead()
+        instantRun("resolve1", "-Pcache-for=0")
+
+        then:
+        fixture.assertStateStored()
+        outputContains("Calculating task graph as configuration cache cannot be reused because cached information for changing artifact lib-1.3.jar (thing:lib:1.3) has expired.")
+        outputContains("result = [lib-1.3.jar]")
+    }
 }

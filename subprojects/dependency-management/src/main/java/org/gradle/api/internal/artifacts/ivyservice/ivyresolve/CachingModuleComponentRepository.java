@@ -62,6 +62,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -87,7 +88,7 @@ public class CachingModuleComponentRepository implements ModuleComponentReposito
     private final CachePolicy cachePolicy;
     private final BuildCommencedTimeProvider timeProvider;
     private final ComponentMetadataProcessor metadataProcessor;
-    private final DynamicVersionResolutionListener listener;
+    private final ChangingValueDependencyResolutionListener listener;
     private final LocateInCacheRepositoryAccess locateInCacheRepositoryAccess = new LocateInCacheRepositoryAccess();
     private final ResolveAndCacheRepositoryAccess resolveAndCacheRepositoryAccess = new ResolveAndCacheRepositoryAccess();
 
@@ -96,7 +97,7 @@ public class CachingModuleComponentRepository implements ModuleComponentReposito
                                             CachePolicy cachePolicy,
                                             BuildCommencedTimeProvider timeProvider,
                                             ComponentMetadataProcessor metadataProcessor,
-                                            DynamicVersionResolutionListener listener) {
+                                            ChangingValueDependencyResolutionListener listener) {
         this.delegate = delegate;
         this.moduleMetadataCache = caches.moduleMetadataCache;
         this.moduleVersionsCache = caches.moduleVersionsCache;
@@ -174,7 +175,7 @@ public class CachingModuleComponentRepository implements ModuleComponentReposito
                 if (expiry.isMustCheck()) {
                     LOGGER.debug("Version listing in dynamic revision cache is expired: will perform fresh resolve of '{}' in '{}'", requested, delegate.getName());
                 } else {
-                    listener.onDynamicVersionResolve(requested, expiry);
+                    listener.onDynamicVersionSelection(requested, expiry);
                     result.listed(versionList);
                     // When age == 0, verified since the start of this build, assume listing hasn't changed
                     result.setAuthoritative(cachedModuleVersionList.getAge().toMillis() == 0);
@@ -328,11 +329,13 @@ public class CachingModuleComponentRepository implements ModuleComponentReposito
             if (cached != null) {
                 ModuleDescriptorHashModuleSource moduleSource = findCachingModuleSource(moduleSources);
                 final HashCode descriptorHash = moduleSource.getDescriptorHash();
-                long age = timeProvider.getCurrentTime() - cached.getCachedAt();
+                Duration age = Duration.ofMillis(timeProvider.getCurrentTime() - cached.getCachedAt());
                 final boolean isChangingModule = moduleSource.isChangingModule();
-                ArtifactIdentifier artifactIdentifier = ((ModuleComponentArtifactMetadata) artifact).toArtifactIdentifier();
+                ModuleComponentArtifactMetadata moduleComponentArtifactMetadata = (ModuleComponentArtifactMetadata) artifact;
+                ArtifactIdentifier artifactIdentifier = moduleComponentArtifactMetadata.toArtifactIdentifier();
                 if (cached.isMissing()) {
-                    if (!cachePolicy.mustRefreshArtifact(artifactIdentifier, null, age, isChangingModule, descriptorHash.equals(cached.getDescriptorHash()))) {
+                    Expiry expiry = cachePolicy.artifactExpiry(artifactIdentifier, null, age, isChangingModule, descriptorHash.equals(cached.getDescriptorHash()));
+                    if (!expiry.isMustCheck()) {
                         LOGGER.debug("Detected non-existence of artifact '{}' in resolver cache", artifact);
                         for (String location : cached.attemptedLocations()) {
                             result.attempted(location);
@@ -341,7 +344,8 @@ public class CachingModuleComponentRepository implements ModuleComponentReposito
                     }
                 } else {
                     File cachedArtifactFile = cached.getCachedFile();
-                    if (!cachePolicy.mustRefreshArtifact(artifactIdentifier, cachedArtifactFile, age, isChangingModule, descriptorHash.equals(cached.getDescriptorHash()))) {
+                    Expiry expiry = cachePolicy.artifactExpiry(artifactIdentifier, cachedArtifactFile, age, isChangingModule, descriptorHash.equals(cached.getDescriptorHash()));
+                    if (!expiry.isMustCheck()) {
                         LOGGER.debug("Found artifact '{}' in resolver cache: {}", artifact, cachedArtifactFile);
                         result.resolved(cachedArtifactFile);
                     }
@@ -373,7 +377,7 @@ public class CachingModuleComponentRepository implements ModuleComponentReposito
                         .map(original -> DefaultModuleVersionIdentifier.newId(moduleId, original))
                         .collect(Collectors.toSet());
                     ModuleVersionsCache.CachedModuleVersionList cacheEntry = moduleVersionsCache.cacheModuleVersionList(delegate, moduleId, versionList);
-                    listener.onDynamicVersionResolve(dependency.getSelector(), cachePolicy.versionListExpiry(moduleId, versions, cacheEntry.getAge()));
+                    listener.onDynamicVersionSelection(dependency.getSelector(), cachePolicy.versionListExpiry(moduleId, versions, cacheEntry.getAge()));
                     break;
                 case Failed:
                     break;
@@ -458,6 +462,8 @@ public class CachingModuleComponentRepository implements ModuleComponentReposito
             ModuleDescriptorHashModuleSource cachingModuleSource = findCachingModuleSource(moduleSources);
             if (failure == null) {
                 moduleArtifactCache.store(artifactCacheKey(artifact.getId()), result.getResult(), cachingModuleSource.getDescriptorHash());
+                Expiry expiry = cachePolicy.artifactExpiry(((ModuleComponentArtifactMetadata) artifact).toArtifactIdentifier(), result.getResult(), Duration.ZERO, cachingModuleSource.isChangingModule(), true);
+                listener.onChangingModuleResolve(artifact.getId(), expiry);
             } else if (failure instanceof ArtifactNotFoundException) {
                 moduleArtifactCache.storeMissing(artifactCacheKey(artifact.getId()), result.getAttempted(), cachingModuleSource.getDescriptorHash());
             }

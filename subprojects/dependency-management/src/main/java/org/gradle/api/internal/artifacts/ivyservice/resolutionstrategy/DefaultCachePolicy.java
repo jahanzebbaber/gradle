@@ -208,18 +208,19 @@ public class DefaultCachePolicy implements CachePolicy {
     }
 
     @Override
-    public boolean mustRefreshArtifact(ArtifactIdentifier artifactIdentifier, File cachedArtifactFile, long ageMillis, boolean belongsToChangingModule, boolean moduleDescriptorInSync) {
-        CachedArtifactResolutionControl artifactResolutionControl = new CachedArtifactResolutionControl(artifactIdentifier, cachedArtifactFile, ageMillis, MILLISECONDS_IN_DAY, belongsToChangingModule);
+    public Expiry artifactExpiry(ArtifactIdentifier artifactIdentifier, File cachedArtifactFile, Duration age, boolean belongsToChangingModule, boolean moduleDescriptorInSync) {
+        CachedArtifactResolutionControl artifactResolutionControl = new CachedArtifactResolutionControl(artifactIdentifier, cachedArtifactFile, age.toMillis(), MILLISECONDS_IN_DAY, belongsToChangingModule);
         if (belongsToChangingModule && !moduleDescriptorInSync) {
-            return true;
+            artifactResolutionControl.refresh();
+            return artifactResolutionControl;
         }
         for (Action<? super ArtifactResolutionControl> rule : artifactCacheRules) {
             rule.execute(artifactResolutionControl);
             if (artifactResolutionControl.ruleMatch()) {
-                return artifactResolutionControl.isMustCheck();
+                break;
             }
         }
-        return false;
+        return artifactResolutionControl;
     }
 
     DefaultCachePolicy copy() {

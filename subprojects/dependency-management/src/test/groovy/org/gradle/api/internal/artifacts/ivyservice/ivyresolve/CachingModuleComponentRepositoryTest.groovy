@@ -62,7 +62,7 @@ class CachingModuleComponentRepositoryTest extends Specification {
     def artifactAtRepositoryCache = Mock(ModuleArtifactCache)
     def cachePolicy = Stub(CachePolicy)
     def metadataProcessor = Stub(ComponentMetadataProcessor)
-    def listener = Stub(DynamicVersionResolutionListener)
+    def listener = Stub(ChangingValueDependencyResolutionListener)
     def caches = new ModuleRepositoryCaches(moduleResolutionCache, moduleDescriptorCache, moduleArtifactsCache, artifactAtRepositoryCache)
     def repo = new CachingModuleComponentRepository(realRepo, caches,
         cachePolicy, new BuildCommencedTimeProvider(), metadataProcessor, listener)
